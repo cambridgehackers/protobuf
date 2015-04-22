@@ -319,6 +319,10 @@
         RelativePath="..\src\google\protobuf\compiler\ruby\ruby_generator.h"
         >
       </File>
+      <File
+        RelativePath="..\src\google\protobuf\compiler\bsv\bsv_generator.h"
+        >
+      </File>
     </Filter>
     <Filter
       Name="Resource Files"

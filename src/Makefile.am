@@ -126,6 +126,7 @@ nobase_include_HEADERS =                                        \
   google/protobuf/compiler/java/java_names.h                    \
   google/protobuf/compiler/javanano/javanano_generator.h        \
   google/protobuf/compiler/python/python_generator.h            \
+  google/protobuf/compiler/bsv/bsv_generator.h            \
   google/protobuf/compiler/ruby/ruby_generator.h
 
 nobase_nodist_include_HEADERS =                                 \
@@ -288,6 +289,7 @@ libprotoc_la_SOURCES =                                         \
   google/protobuf/compiler/javanano/javanano_primitive_field.cc \
   google/protobuf/compiler/javanano/javanano_primitive_field.h \
   google/protobuf/compiler/python/python_generator.cc          \
+  google/protobuf/compiler/bsv/bsv_generator.cc          \
   google/protobuf/compiler/ruby/ruby_generator.cc
 
 bin_PROGRAMS = protoc
@@ -492,6 +494,7 @@ protobuf_test_SOURCES =                                        \
   google/protobuf/compiler/java/java_plugin_unittest.cc        \
   google/protobuf/compiler/java/java_doc_comment_unittest.cc   \
   google/protobuf/compiler/python/python_plugin_unittest.cc    \
+  google/protobuf/compiler/bsv/bsv_plugin_unittest.cc    \
   google/protobuf/compiler/ruby/ruby_generator_unittest.cc     \
   $(COMMON_TEST_SOURCES)
 nodist_protobuf_test_SOURCES = $(protoc_outputs)

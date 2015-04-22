@@ -9,6 +9,7 @@ md include\google\protobuf\compiler\java
 md include\google\protobuf\compiler\javanano
 md include\google\protobuf\compiler\python
 md include\google\protobuf\compiler\ruby
+md include\google\protobuf\compiler\bsv
 copy ..\src\google\protobuf\arena.h include\google\protobuf\arena.h
 copy ..\src\google\protobuf\arenastring.h include\google\protobuf\arenastring.h
 copy ..\src\google\protobuf\compiler\code_generator.h include\google\protobuf\compiler\code_generator.h
@@ -22,6 +23,7 @@ copy ..\src\google\protobuf\compiler\plugin.h include\google\protobuf\compiler\p
 copy ..\src\google\protobuf\compiler\plugin.pb.h include\google\protobuf\compiler\plugin.pb.h
 copy ..\src\google\protobuf\compiler\python\python_generator.h include\google\protobuf\compiler\python\python_generator.h
 copy ..\src\google\protobuf\compiler\ruby\ruby_generator.h include\google\protobuf\compiler\ruby\ruby_generator.h
+copy ..\src\google\protobuf\compiler\bsv\bsv_generator.h include\google\protobuf\compiler\bsv\bsv_generator.h
 copy ..\src\google\protobuf\descriptor_database.h include\google\protobuf\descriptor_database.h
 copy ..\src\google\protobuf\descriptor.h include\google\protobuf\descriptor.h
 copy ..\src\google\protobuf\descriptor.pb.h include\google\protobuf\descriptor.pb.h

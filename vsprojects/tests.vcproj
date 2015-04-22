@@ -298,6 +298,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\google\protobuf\compiler\bsv\bsv_plugin_unittest.cc"
+				>
+			</File>
+			<File
 				RelativePath="..\src\google\protobuf\descriptor_database_unittest.cc"
 				>
 			</File>
