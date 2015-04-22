@@ -12,7 +12,9 @@ as written in the IDL.  (they can be mechanically placed into bits in registers)
 
 3. FSMs to decode/encode int32/int64/uint32/uint64/sint32/sint64 will add complexity.  fixed32/fixed64/sfixed32/sfixed64 should be a lot faster processing. (communication time to the board is << ethernet network time)
 
-4. FSMs to decode variable length fields ('repeated', 'bytes', 'string') will add complexity (and unbounded sizes cannot be supported).
+4. FSMs to decode variable length fields ('repeated', 'bytes', 'string') will add complexity.
+
+5. Unbounded sizes cannot be supported in hardware registers and similar fixed structures.
 
 IDL language:
 
@@ -29,3 +31,5 @@ Possible implementation alternatives:
 4. Change line encoding to reflect all the constraints above(no tags, fixed length arrays).  (highest performing hardware)
 
 2014/04/22 13:28 EDT jca
+2014/04/22 13:56 EDt jamey
+
