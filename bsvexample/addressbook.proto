@@ -23,5 +23,5 @@ message Person {
 
 // Our address book file is just one of these.
 message AddressBook {
-  repeated Person person = 1;
+  repeated Person person = 32;
 }

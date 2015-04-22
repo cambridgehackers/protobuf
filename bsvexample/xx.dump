@@ -1,0 +1,57 @@
+
+
+Enter person ID number: 15
+Enter name: 16
+Enter email address (blank for none): 17
+Enter a phone number (or leave blank to finish): 18
+Is this a mobile, home, or work phone? home
+Enter a phone number (or leave blank to finish): 19
+Is this a mobile, home, or work phone? work
+Enter a phone number (or leave blank to finish): 0
+
+Enter person ID number: 31
+Enter name: 32
+Enter email address (blank for none): 33
+Enter a phone number (or leave blank to finish): 34
+Is this a mobile, home, or work phone? work
+Enter a phone number (or leave blank to finish): 0
+
+82 02 21
+     0d
+        10 00 00 00
+     15
+        0f 00 00 00
+     1d
+        11 00 00 00
+     22 07
+         0d
+            12 00 00 00
+         10
+            01
+     22 07
+         0d 13 00 00 00
+         10
+            02
+82 02 18
+     0d
+        20 00 00 00
+     15
+        1f 00 00 00
+     1d
+        21 00 00 00
+     22 07
+         0d
+            22 00 00 00
+         10
+            02    
+
+
+0a 1c                  // 1 AddressBook.person?,2: len = 28. 
+   15 6f 00 00 00      // 2 Person.id,5: 111
+   1d de 00 00 00      // 3 Person.email,5: 222
+     22 07             // 4 Person.phone,2: len = 7
+        0d 4d 01 00 00 // 1 PhoneNumber.number,5: 333
+        10 01          // 2 PhoneNumber.type,0: HOME
+     22 07             // 4 Person.phone,2: len = 7
+        0d bc 01 00 00 // 1 PhoneNumber.number,5: 444
+        10 00          // 2 PhoneNumber.type,0: MOBILE

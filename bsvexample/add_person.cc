@@ -15,16 +15,20 @@ void PromptForAddress(tutorial::Person* person) {
   cin.ignore(256, '\n');
 
   cout << "Enter name: ";
-  //getline(cin, *person->mutable_name());
+  int name;
+  cin >> name;
+  person->set_name(name);
+  cin.ignore(256, '\n');
 
-  cout << "Enter email address (blank for none): ";
+  cout << "Enter email address (or 0 for none): ";
   int email;
   cin >> email;
   cin.ignore(256, '\n');
-  person->set_email(email);
+  if (email)
+    person->set_email(email);
 
   while (true) {
-    cout << "Enter a phone number (or leave blank to finish): ";
+    cout << "Enter a phone number (or 0 to finish): ";
     int number;
     cin >> number;
     cin.ignore(256, '\n');
