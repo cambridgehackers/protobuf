@@ -1,0 +1,31 @@
+
+At this stage, it seems more important to flush out all the questions and
+not prematurely state conclusions.  All the points listed below are just
+items that I think should be discussed in prepartion for making design decisions.
+
+Line encoding:
+
+1. Efficiency of hardware can be improved by requiring fields to be sent in the same order
+as written in the IDL.  (they can be mechanically placed into bits in registers)
+
+2. Efficiency of hardware can be improved by only supporting 'required' fields. (tags can be skipped entirely on SW->HW processing)
+
+3. FSMs to decode/encode int32/int64/uint32/uint64/sint32/sint64 will add complexity.  fixed32/fixed64/sfixed32/sfixed64 should be a lot faster processing. (communication time to the board is << ethernet network time)
+
+4. FSMs to decode variable length fields ('repeated', 'bytes', 'string') will add complexity (and unbounded sizes cannot be supported).
+
+IDL language:
+
+1. In hardware, it is more efficient to support fixed length vectors.  It would be useful to have an optional 'size' field on 'repeated' fields.
+
+Possible implementation alternatives:
+
+1. Support full/unconstrained current coding.  (most expensive in h/w; lowest performance)
+
+2. Constrain use of IDL types (for example, only use fixed length ints)
+
+3. Extend IDL to specify upper bounds on 'repeated' lengths.
+
+4. Change line encoding to reflect all the constraints above(no tags, fixed length arrays).  (highest performing hardware)
+
+2014/04/22 13:28 EDT jca
