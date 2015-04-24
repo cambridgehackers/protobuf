@@ -25,3 +25,15 @@ message Person {
 message AddressBook {
   repeated Person person = 32;
 }
+message AddressBook2 {
+  required Person person = 33;
+  required Person person2 = 34;
+}
+
+message Empty {
+}
+
+service EchoRequest {
+  rpc echo (AddressBook) returns (Empty);
+  rpc echo2 (AddressBook2) returns (Empty);
+}

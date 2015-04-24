@@ -144,9 +144,9 @@ const char kDescriptorKey[] = "DESCRIPTOR";
 
 
 // Does the file have top-level enums?
-inline bool HasTopLevelEnums(const FileDescriptor *file) {
-  return file->enum_type_count() > 0;
-}
+//inline bool HasTopLevelEnums(const FileDescriptor *file) {
+  //return file->enum_type_count() > 0;
+//}
 
 
 // Should we generate generic services for this file?
@@ -166,26 +166,7 @@ void PrintTopBoilerplate(
       "// source: $filename$\n"
       "\n",
       "filename", file->name());
-  if (HasTopLevelEnums(file)) {
-    printer->Print(
-        "from google.protobuf.internal import enum_type_wrapper\n");
-  }
-  printer->Print(
-      "from google.protobuf import reflection as _reflection\n");
-  if (HasGenericServices(file)) {
-    printer->Print(
-        "from google.protobuf import service_reflection\n");
-  }
-
-  // Avoid circular imports if this module is descriptor_pb2.
-  if (!descriptor_proto) {
-    printer->Print(
-        "from google.protobuf import descriptor_pb2\n");
-  }
-  printer->Print(
-      "// @@protoc_insertion_point(imports)\n\n"
-      "_sym_db = _symbol_database.Default()\n");
-  printer->Print("\n\n");
+  //printer->Print("\n");
 }
 
 
@@ -270,8 +251,7 @@ string StringifySyntax(FileDescriptor::Syntax syntax) {
       return "proto3";
     case FileDescriptor::SYNTAX_UNKNOWN:
     default:
-      GOOGLE_LOG(FATAL) << "Unsupported syntax; this generator only supports proto2 "
-                    "and proto3 syntax.";
+      GOOGLE_LOG(FATAL) << "Unsupported syntax; this generator only supports proto2 and proto3 syntax.";
       return "";
   }
 }
@@ -307,9 +287,7 @@ bool Generator::Generate(const FileDescriptor* file,
 
   FileDescriptorProto fdp;
   file_->CopyTo(&fdp);
-  fdp.SerializeToString(&file_descriptor_serialized_);
-
-
+  fdp.SerializeToString(&file_descriptor_serialized_); 
   google::protobuf::scoped_ptr<io::ZeroCopyOutputStream> output(context->Open(filename));
   GOOGLE_CHECK(output.get());
   io::Printer printer(output.get(), '$');
@@ -317,29 +295,92 @@ bool Generator::Generate(const FileDescriptor* file,
 
   PrintTopBoilerplate(printer_, file_, GeneratingDescriptorProto());
   PrintImports();
-  PrintFileDescriptor();
-  PrintTopLevelEnums();
-  PrintTopLevelExtensions();
-  PrintAllNestedEnumsInFile();
-  PrintMessageDescriptors();
-  FixForeignFieldsInDescriptors();
-  PrintMessages();
-  // We have to fix up the extensions after the message classes themselves,
-  // since they need to call static RegisterExtension() methods on these
-  // classes.
-  FixForeignFieldsInExtensions();
-  // Descriptor options may have custom extensions. These custom options
-  // can only be successfully parsed after we register corresponding
-  // extensions. Therefore we parse all options again here to recognize
-  // custom options that may be unknown when we define the descriptors.
-  FixAllDescriptorOptions();
-  if (HasGenericServices(file)) {
-    PrintServices();
+  vector<pair<string, int> > top_level_enum_values;
+  for (int i = 0; i < file_->enum_type_count(); ++i) {
+    const EnumDescriptor& enum_descriptor = *file_->enum_type(i);
+    PrintEnum(enum_descriptor);
+    printer_->Print("$name$ = enum_type_wrapper.EnumTypeWrapper($descriptor_name$)",
+        "name", enum_descriptor.name(), "descriptor_name", ModuleLevelDescriptorName(enum_descriptor));
+
+    for (int j = 0; j < enum_descriptor.value_count(); ++j) {
+      const EnumValueDescriptor& value_descriptor = *enum_descriptor.value(j);
+      top_level_enum_values.push_back( std::make_pair(value_descriptor.name(), value_descriptor.number()));
+    }
   }
+  for (int i = 0; i < top_level_enum_values.size(); ++i) {
+    printer_->Print("$name$ = $value$\n", "name", top_level_enum_values[i].first, "value", SimpleItoa(top_level_enum_values[i].second));
+  }
+  const bool top_is_extension = true;
+  for (int i = 0; i < file_->extension_count(); ++i) {
+    const FieldDescriptor& extension_field = *file_->extension(i);
+    string constant_name = extension_field.name() + "_FIELD_NUMBER";
+    UpperString(&constant_name);
+    printer_->Print("$constant_name$ = $number$\n", "constant_name", constant_name, "number", SimpleItoa(extension_field.number()));
+    printer_->Print("$name$ = ", "name", extension_field.name());
+    PrintFieldDescriptor(extension_field, top_is_extension);
+  }
+  for (int i = 0; i < file_->message_type_count(); ++i) {
+    PrintNestedEnums(*file_->message_type(i));
+  }
+  for (int i = 0; i < file_->message_type_count(); ++i) {
+    PrintDescriptor(*file_->message_type(i));
+  }
+#if 0
+  for (int i = 0; i < file_->message_type_count(); ++i) {
+    vector<string> to_register;
+    PrintMessage(*file_->message_type(i), "", &to_register);
+    for (int j = 0; j < to_register.size(); ++j) {
+      printer_->Print("REGMESS($name$)\n", "name", to_register[j]);
+    }
+  }
+#endif
+  FixAllDescriptorOptions();
+  for (int outeri = 0; outeri < file_->service_count(); ++outeri) {
+    //PrintServiceDescriptor(*file_->service(outeri));
+//void Generator::PrintServiceDescriptor(const ServiceDescriptor& descriptor) const {
+  //printer_->Print("\n");
+    string service_name = ModuleLevelServiceDescriptorName(*file_->service(outeri));
+    string options_string;
+    file_->service(outeri)->options().SerializeToString(&options_string);
+    //printer_->Print( "$service_name$ = _descriptor.ServiceDescriptor(\n", "service_name", service_name);
+    map<string, string> m;
+    m["name"] = file_->service(outeri)->name();
+    m["full_name"] = file_->service(outeri)->full_name();
+    m["file"] = kDescriptorKey;
+    m["index"] = SimpleItoa(file_->service(outeri)->index());
+    m["options_value"] = OptionsValue("ServiceOptions", options_string);
+    printer_->Print(m, "interface $name$;\n");
+    printer_->Indent();
+    //ServiceDescriptorProto sdp;
+    //PrintSerializedPbInterval(descriptor, sdp);
+    //printer_->Print("methods=[");
+    for (int inneri = 0; inneri < file_->service(outeri)->method_count(); ++inneri) {
+      const MethodDescriptor* method = file_->service(outeri)->method(inneri);
+      method->options().SerializeToString(&options_string);
 
-  printer.Print(
-    "// @@protoc_insertion_point(module_scope)\n");
-
+      m.clear();
+      m["name"] = method->name();
+      m["full_name"] = method->full_name();
+      m["index"] = SimpleItoa(method->index());
+      m["serialized_options"] = CEscape(options_string);
+      //m["input_type"] = ModuleLevelDescriptorName(*(method->input_type()));
+      m["input_type"] = method->input_type()->name();
+      //const Descriptor *mt = method->input_type()->message_type();
+      //m["input_type"] = mt->name();
+      //m["output_type"] = ModuleLevelDescriptorName(*(method->output_type()));
+      m["options_value"] = OptionsValue("MethodOptions", options_string);
+      //printer_->Print("_descriptor.MethodDescriptor(\n");
+      //printer_->Indent();
+      printer_->Print( m, "method $name$($input_type$ v);\n");
+      //printer_->Outdent();
+      //printer_->Print("),");
+    }
+    printer_->Outdent();
+    printer_->Print("endinterface\n");
+//}
+    //PrintServiceClass(*file_->service(outeri));
+    //PrintServiceStub(*file_->service(outeri));
+  }
   return !printer.failed();
 }
 
@@ -349,133 +390,35 @@ void Generator::PrintImports() const {
     const string& filename = file_->dependency(i)->name();
     string import_statement = ModuleImportStatement(filename);
     string module_alias = ModuleAlias(filename);
-    printer_->Print("$statement$ as $alias$\n", "statement",
-                    import_statement, "alias", module_alias);
+    printer_->Print("$statement$ as $alias$\n", "statement", import_statement, "alias", module_alias);
     CopyPublicDependenciesAliases(module_alias, file_->dependency(i));
   }
-  printer_->Print("\n");
-
   // Print public imports.
   for (int i = 0; i < file_->public_dependency_count(); ++i) {
     string module_name = ModuleName(file_->public_dependency(i)->name());
     printer_->Print("from $module$ import *\n", "module", module_name);
   }
-  printer_->Print("\n");
 }
 
-// Prints the single file descriptor for this file.
-void Generator::PrintFileDescriptor() const {
-  map<string, string> m;
-  m["descriptor_name"] = kDescriptorKey;
-  m["name"] = file_->name();
-  m["package"] = file_->package();
-  m["syntax"] = StringifySyntax(file_->syntax());
-  const char file_descriptor_template[] =
-      "$descriptor_name$ = _descriptor.FileDescriptor(\n"
-      "  name='$name$',\n"
-      "  package='$package$',\n"
-      "  syntax='$syntax$',\n";
-  printer_->Print(m, file_descriptor_template);
-  printer_->Indent();
-  printer_->Print(
-      "serialized_pb=_b('$value$')\n",
-      "value", strings::CHexEscape(file_descriptor_serialized_));
-  if (file_->dependency_count() != 0) {
-    printer_->Print(",\ndependencies=[");
-    for (int i = 0; i < file_->dependency_count(); ++i) {
-      string module_alias = ModuleAlias(file_->dependency(i)->name());
-      printer_->Print("$module_alias$.DESCRIPTOR,", "module_alias",
-                      module_alias);
-    }
-    printer_->Print("]");
-  }
-
-  // TODO(falk): Also print options and fix the message_type, enum_type,
-  //             service and extension later in the generation.
-
-  printer_->Outdent();
-  printer_->Print(")\n");
-  printer_->Print("_sym_db.RegisterFileDescriptor($name$)\n", "name",
-                  kDescriptorKey);
-  printer_->Print("\n");
-}
-
-// Prints descriptors and module-level constants for all top-level
-// enums defined in |file|.
-void Generator::PrintTopLevelEnums() const {
-  vector<pair<string, int> > top_level_enum_values;
-  for (int i = 0; i < file_->enum_type_count(); ++i) {
-    const EnumDescriptor& enum_descriptor = *file_->enum_type(i);
-    PrintEnum(enum_descriptor);
-    printer_->Print("$name$ = "
-                    "enum_type_wrapper.EnumTypeWrapper($descriptor_name$)",
-                    "name", enum_descriptor.name(),
-                    "descriptor_name",
-                    ModuleLevelDescriptorName(enum_descriptor));
-    printer_->Print("\n");
-
-    for (int j = 0; j < enum_descriptor.value_count(); ++j) {
-      const EnumValueDescriptor& value_descriptor = *enum_descriptor.value(j);
-      top_level_enum_values.push_back(
-          std::make_pair(value_descriptor.name(), value_descriptor.number()));
-    }
-  }
-
-  for (int i = 0; i < top_level_enum_values.size(); ++i) {
-    printer_->Print("$name$ = $value$\n",
-                    "name", top_level_enum_values[i].first,
-                    "value", SimpleItoa(top_level_enum_values[i].second));
-  }
-  printer_->Print("\n");
-}
-
-// Prints all enums contained in all message types in |file|.
-void Generator::PrintAllNestedEnumsInFile() const {
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    PrintNestedEnums(*file_->message_type(i));
-  }
-}
-
-// Prints a BSV statement assigning the appropriate module-level
-// enum name to a BSV EnumDescriptor object equivalent to
-// enum_descriptor.
 void Generator::PrintEnum(const EnumDescriptor& enum_descriptor) const {
-  map<string, string> m;
   string module_level_descriptor_name =
       ModuleLevelDescriptorName(enum_descriptor);
-  m["descriptor_name"] = module_level_descriptor_name;
-  m["name"] = enum_descriptor.name();
-  m["full_name"] = enum_descriptor.full_name();
-  m["file"] = kDescriptorKey;
-  const char enum_descriptor_template[] =
-      "$descriptor_name$ = _descriptor.EnumDescriptor(\n"
-      "  name='$name$',\n"
-      "  full_name='$full_name$',\n"
-      "  filename=None,\n"
-      "  file=$file$,\n"
-      "  values=[\n";
   string options_string;
   enum_descriptor.options().SerializeToString(&options_string);
-  printer_->Print(m, enum_descriptor_template);
-  printer_->Indent();
+  printer_->Print("typedef enum {");
   printer_->Indent();
   for (int i = 0; i < enum_descriptor.value_count(); ++i) {
-    PrintEnumValueDescriptor(*enum_descriptor.value(i));
-    printer_->Print(",\n");
+    string options_string;
+    enum_descriptor.value(i)->options().SerializeToString(&options_string);
+    map<string, string> m;
+    m["name"] = enum_descriptor.value(i)->name();
+    m["index"] = SimpleItoa(enum_descriptor.value(i)->index());
+    m["number"] = SimpleItoa(enum_descriptor.value(i)->number());
+    m["options"] = OptionsValue("EnumValueOptions", options_string);
+    printer_->Print( m, "$name$=$number$,");
   }
   printer_->Outdent();
-  printer_->Print("],\n");
-  printer_->Print("containing_type=None,\n");
-  printer_->Print("options=$options_value$,\n",
-                  "options_value",
-                  OptionsValue("EnumOptions", options_string));
-  EnumDescriptorProto edp;
-  PrintSerializedPbInterval(enum_descriptor, edp);
-  printer_->Outdent();
-  printer_->Print(")\n");
-  printer_->Print("_sym_db.RegisterEnumDescriptor($name$)\n", "name",
-                  module_level_descriptor_name);
-  printer_->Print("\n");
+  printer_->Print("} $name$;\n", "name", enum_descriptor.name());
 }
 
 // Recursively prints enums in nested types within descriptor, then
@@ -484,117 +427,21 @@ void Generator::PrintNestedEnums(const Descriptor& descriptor) const {
   for (int i = 0; i < descriptor.nested_type_count(); ++i) {
     PrintNestedEnums(*descriptor.nested_type(i));
   }
-
   for (int i = 0; i < descriptor.enum_type_count(); ++i) {
     PrintEnum(*descriptor.enum_type(i));
   }
-}
-
-void Generator::PrintTopLevelExtensions() const {
-  const bool is_extension = true;
-  for (int i = 0; i < file_->extension_count(); ++i) {
-    const FieldDescriptor& extension_field = *file_->extension(i);
-    string constant_name = extension_field.name() + "_FIELD_NUMBER";
-    UpperString(&constant_name);
-    printer_->Print("$constant_name$ = $number$\n",
-      "constant_name", constant_name,
-      "number", SimpleItoa(extension_field.number()));
-    printer_->Print("$name$ = ", "name", extension_field.name());
-    PrintFieldDescriptor(extension_field, is_extension);
-    printer_->Print("\n");
-  }
-  printer_->Print("\n");
-}
-
-// Prints BSV equivalents of all Descriptors in |file|.
-void Generator::PrintMessageDescriptors() const {
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    PrintDescriptor(*file_->message_type(i));
-    printer_->Print("\n");
-  }
-}
-
-void Generator::PrintServices() const {
-  for (int i = 0; i < file_->service_count(); ++i) {
-    PrintServiceDescriptor(*file_->service(i));
-    PrintServiceClass(*file_->service(i));
-    PrintServiceStub(*file_->service(i));
-    printer_->Print("\n");
-  }
-}
-
-void Generator::PrintServiceDescriptor(
-    const ServiceDescriptor& descriptor) const {
-  printer_->Print("\n");
-  string service_name = ModuleLevelServiceDescriptorName(descriptor);
-  string options_string;
-  descriptor.options().SerializeToString(&options_string);
-
-  printer_->Print(
-      "$service_name$ = _descriptor.ServiceDescriptor(\n",
-      "service_name", service_name);
-  printer_->Indent();
-  map<string, string> m;
-  m["name"] = descriptor.name();
-  m["full_name"] = descriptor.full_name();
-  m["file"] = kDescriptorKey;
-  m["index"] = SimpleItoa(descriptor.index());
-  m["options_value"] = OptionsValue("ServiceOptions", options_string);
-  const char required_function_arguments[] =
-      "name='$name$',\n"
-      "full_name='$full_name$',\n"
-      "file=$file$,\n"
-      "index=$index$,\n"
-      "options=$options_value$,\n";
-  printer_->Print(m, required_function_arguments);
-
-  ServiceDescriptorProto sdp;
-  PrintSerializedPbInterval(descriptor, sdp);
-
-  printer_->Print("methods=[\n");
-  for (int i = 0; i < descriptor.method_count(); ++i) {
-    const MethodDescriptor* method = descriptor.method(i);
-    method->options().SerializeToString(&options_string);
-
-    m.clear();
-    m["name"] = method->name();
-    m["full_name"] = method->full_name();
-    m["index"] = SimpleItoa(method->index());
-    m["serialized_options"] = CEscape(options_string);
-    m["input_type"] = ModuleLevelDescriptorName(*(method->input_type()));
-    m["output_type"] = ModuleLevelDescriptorName(*(method->output_type()));
-    m["options_value"] = OptionsValue("MethodOptions", options_string);
-    printer_->Print("_descriptor.MethodDescriptor(\n");
-    printer_->Indent();
-    printer_->Print(
-        m,
-        "name='$name$',\n"
-        "full_name='$full_name$',\n"
-        "index=$index$,\n"
-        "containing_service=None,\n"
-        "input_type=$input_type$,\n"
-        "output_type=$output_type$,\n"
-        "options=$options_value$,\n");
-    printer_->Outdent();
-    printer_->Print("),\n");
-  }
-
-  printer_->Outdent();
-  printer_->Print("])\n\n");
 }
 
 
 void Generator::PrintDescriptorKeyAndModuleName(
     const ServiceDescriptor& descriptor) const {
   printer_->Print(
-      "$descriptor_key$ = $descriptor_name$,\n",
+      "$descriptor_key$ = $descriptor_name$,",
       "descriptor_key", kDescriptorKey,
       "descriptor_name", ModuleLevelServiceDescriptorName(descriptor));
-  printer_->Print(
-      "__module__ = '$module_name$'\n",
-      "module_name", ModuleName(file_->name()));
+  //printer_->Print( "__module__ = '$module_name$'\n", "module_name", ModuleName(file_->name()));
 }
-
+#if 0
 void Generator::PrintServiceClass(const ServiceDescriptor& descriptor) const {
   // Print the service.
   printer_->Print("$class_name$ = service_reflection.GeneratedServiceType("
@@ -608,85 +455,79 @@ void Generator::PrintServiceClass(const ServiceDescriptor& descriptor) const {
 
 void Generator::PrintServiceStub(const ServiceDescriptor& descriptor) const {
   // Print the service stub.
-  printer_->Print("$class_name$_Stub = "
-                  "service_reflection.GeneratedServiceStubType("
-                  "'$class_name$_Stub', ($class_name$,), dict(\n",
-                  "class_name", descriptor.name());
+  printer_->Print("$class_name$_Stub = GSST('$class_name$_Stub', ($class_name$,), dict(\n", "class_name", descriptor.name());
   printer_->Indent();
   Generator::PrintDescriptorKeyAndModuleName(descriptor);
   printer_->Print("))\n\n");
   printer_->Outdent();
 }
+#endif
 
 // Prints statement assigning ModuleLevelDescriptorName(message_descriptor)
 // to a BSV Descriptor object for message_descriptor.
-//
-// Mutually recursive with PrintNestedDescriptors().
+//void Generator::PrintNestedDescriptors(const Descriptor& containing_descriptor) const {
+//}
 void Generator::PrintDescriptor(const Descriptor& message_descriptor) const {
-  PrintNestedDescriptors(message_descriptor);
+  //PrintNestedDescriptors(message_descriptor);
+  for (int i = 0; i < message_descriptor.nested_type_count(); ++i) {
+    PrintDescriptor(*message_descriptor.nested_type(i));
+  }
 
-  printer_->Print("\n");
-  printer_->Print("$descriptor_name$ = _descriptor.Descriptor(\n",
-                  "descriptor_name",
-                  ModuleLevelDescriptorName(message_descriptor));
-  printer_->Indent();
+  //printer_->Print("\n$descriptor_name$ = DESC(\n", "descriptor_name", ModuleLevelDescriptorName(message_descriptor));
+  //printer_->Indent();
   map<string, string> m;
   m["name"] = message_descriptor.name();
   m["full_name"] = message_descriptor.full_name();
   m["file"] = kDescriptorKey;
-  const char required_function_arguments[] =
-      "name='$name$',\n"
-      "full_name='$full_name$',\n"
-      "filename=None,\n"
-      "file=$file$,\n"
-      "containing_type=None,\n";
-  printer_->Print(m, required_function_arguments);
-  PrintFieldsInDescriptor(message_descriptor);
-  PrintExtensionsInDescriptor(message_descriptor);
-
+  const bool is_extension = false;
+  if (!strcmp(message_descriptor.name().c_str(), "Empty"))
+      return;   // don't print this definition
+  printer_->Print("typedef struct {\n");
+  printer_->Indent();
+  for (int i = 0; i < (message_descriptor.field_count)(); ++i) {
+    PrintFieldDescriptor(*(message_descriptor.field)(i), is_extension);
+  }
+  //printer_->Outdent();
+  printer_->Print(m, "} $name$");
+  //printer_->Print("],");
+#if 0
   // Nested types
-  printer_->Print("nested_types=[");
+  if (message_descriptor.nested_type_count()) {
+  printer_->Print("ntypes=[");
   for (int i = 0; i < message_descriptor.nested_type_count(); ++i) {
-    const string nested_name = ModuleLevelDescriptorName(
-        *message_descriptor.nested_type(i));
+    const string nested_name = ModuleLevelDescriptorName( *message_descriptor.nested_type(i));
     printer_->Print("$name$, ", "name", nested_name);
   }
-  printer_->Print("],\n");
-
+  printer_->Print("],");
+  }
   // Enum types
-  printer_->Print("enum_types=[\n");
+  if (message_descriptor.enum_type_count()) {
+  printer_->Print("etypes=[");
   printer_->Indent();
   for (int i = 0; i < message_descriptor.enum_type_count(); ++i) {
-    const string descriptor_name = ModuleLevelDescriptorName(
-        *message_descriptor.enum_type(i));
+    const string descriptor_name = ModuleLevelDescriptorName( *message_descriptor.enum_type(i));
     printer_->Print(descriptor_name.c_str());
-    printer_->Print(",\n");
+    printer_->Print(",");
   }
   printer_->Outdent();
-  printer_->Print("],\n");
+  printer_->Print("],");
+  }
   string options_string;
   message_descriptor.options().SerializeToString(&options_string);
-  printer_->Print(
-      "options=$options_value$,\n"
-      "is_extendable=$extendable$,\n"
-      "syntax='$syntax$'",
-      "options_value", OptionsValue("MessageOptions", options_string),
-      "extendable", message_descriptor.extension_range_count() > 0 ?
-                      "True" : "False",
-      "syntax", StringifySyntax(message_descriptor.file()->syntax()));
-  printer_->Print(",\n");
+  printer_->Print(",");
+#endif
 
   // Extension ranges
+  if (message_descriptor.extension_range_count()) {
   printer_->Print("extension_ranges=[");
   for (int i = 0; i < message_descriptor.extension_range_count(); ++i) {
-    const Descriptor::ExtensionRange* range =
-        message_descriptor.extension_range(i);
-    printer_->Print("($start$, $end$), ",
-                    "start", SimpleItoa(range->start),
-                    "end", SimpleItoa(range->end));
+    const Descriptor::ExtensionRange* range = message_descriptor.extension_range(i);
+    printer_->Print("($start$, $end$), ", "start", SimpleItoa(range->start), "end", SimpleItoa(range->end));
   }
-  printer_->Print("],\n");
-  printer_->Print("oneofs=[\n");
+  printer_->Print("],");
+  }
+  if (message_descriptor.oneof_decl_count()) {
+  printer_->Print("oneofs=[");
   printer_->Indent();
   for (int i = 0; i < message_descriptor.oneof_decl_count(); ++i) {
     const OneofDescriptor* desc = message_descriptor.oneof_decl(i);
@@ -694,132 +535,41 @@ void Generator::PrintDescriptor(const Descriptor& message_descriptor) const {
     m["name"] = desc->name();
     m["full_name"] = desc->full_name();
     m["index"] = SimpleItoa(desc->index());
-    printer_->Print(
-        m,
-        "_descriptor.OneofDescriptor(\n"
-        "  name='$name$', full_name='$full_name$',\n"
-        "  index=$index$, containing_type=None, fields=[]),\n");
+    printer_->Print( m, "OOD(name='$name$'),");
   }
   printer_->Outdent();
-  printer_->Print("],\n");
+  printer_->Print("],");
+  }
   // Serialization of proto
-  DescriptorProto edp;
-  PrintSerializedPbInterval(message_descriptor, edp);
-
+  //DescriptorProto edp;
+  //PrintSerializedPbInterval(message_descriptor, edp); 
   printer_->Outdent();
-  printer_->Print(")\n");
+  printer_->Print(";\n");
 }
-
-// Prints BSV Descriptor objects for all nested types contained in
-// message_descriptor.
-//
-// Mutually recursive with PrintDescriptor().
-void Generator::PrintNestedDescriptors(
-    const Descriptor& containing_descriptor) const {
-  for (int i = 0; i < containing_descriptor.nested_type_count(); ++i) {
-    PrintDescriptor(*containing_descriptor.nested_type(i));
-  }
-}
-
-// Prints all messages in |file|.
-void Generator::PrintMessages() const {
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    vector<string> to_register;
-    PrintMessage(*file_->message_type(i), "", &to_register);
-    for (int j = 0; j < to_register.size(); ++j) {
-      printer_->Print("_sym_db.RegisterMessage($name$)\n", "name",
-                      to_register[j]);
-    }
-    printer_->Print("\n");
-  }
-}
-
-// Prints a BSV class for the given message descriptor.  We defer to the
-// metaclass to do almost all of the work of actually creating a useful class.
-// The purpose of this function and its many helper functions above is merely
-// to output a BSV version of the descriptors, which the metaclass in
-// reflection.py will use to construct the meat of the class itself.
-//
-// Mutually recursive with PrintNestedMessages().
-// Collect nested message names to_register for the symbol_database.
-void Generator::PrintMessage(const Descriptor& message_descriptor,
-                             const string& prefix,
-                             vector<string>* to_register) const {
+#if 0
+void Generator::PrintMessage(const Descriptor& message_descriptor, const string& prefix, vector<string>* to_register) const {
   string qualified_name(prefix + message_descriptor.name());
   to_register->push_back(qualified_name);
-  printer_->Print(
-      "$name$ = _reflection.GeneratedProtocolMessageType('$name$', "
-      "(_message.Message,), dict(\n",
-      "name", message_descriptor.name());
-  printer_->Indent();
-
+  printer_->Print("$name$ = GMESS('$name$', dict(", "name", message_descriptor.name());
+  printer_->Indent(); 
   PrintNestedMessages(message_descriptor, qualified_name + ".", to_register);
   map<string, string> m;
   m["descriptor_key"] = kDescriptorKey;
   m["descriptor_name"] = ModuleLevelDescriptorName(message_descriptor);
-  printer_->Print(m, "$descriptor_key$ = $descriptor_name$,\n");
-  printer_->Print("__module__ = '$module_name$'\n",
-                  "module_name", ModuleName(file_->name()));
-  printer_->Print("// @@protoc_insertion_point(class_scope:$full_name$)\n",
-                  "full_name", message_descriptor.full_name());
+  printer_->Print(m, "$descriptor_key$ = $descriptor_name$,");
+  //printer_->Print("__module__ = '$module_name$'\n", "module_name", ModuleName(file_->name()));
   printer_->Print("))\n");
   printer_->Outdent();
 }
-
-// Prints all nested messages within |containing_descriptor|.
-// Mutually recursive with PrintMessage().
-void Generator::PrintNestedMessages(const Descriptor& containing_descriptor,
-                                    const string& prefix,
-                                    vector<string>* to_register) const {
+void Generator::PrintNestedMessages(const Descriptor& containing_descriptor, const string& prefix, vector<string>* to_register) const {
   for (int i = 0; i < containing_descriptor.nested_type_count(); ++i) {
     printer_->Print("\n");
     PrintMessage(*containing_descriptor.nested_type(i), prefix, to_register);
-    printer_->Print(",\n");
+    printer_->Print(",");
   }
 }
+#endif
 
-// Recursively fixes foreign fields in all nested types in |descriptor|, then
-// sets the message_type and enum_type of all message and enum fields to point
-// to their respective descriptors.
-// Args:
-//   descriptor: descriptor to print fields for.
-//   containing_descriptor: if descriptor is a nested type, this is its
-//       containing type, or NULL if this is a root/top-level type.
-void Generator::FixForeignFieldsInDescriptor(
-    const Descriptor& descriptor,
-    const Descriptor* containing_descriptor) const {
-  for (int i = 0; i < descriptor.nested_type_count(); ++i) {
-    FixForeignFieldsInDescriptor(*descriptor.nested_type(i), &descriptor);
-  }
-
-  for (int i = 0; i < descriptor.field_count(); ++i) {
-    const FieldDescriptor& field_descriptor = *descriptor.field(i);
-    FixForeignFieldsInField(&descriptor, field_descriptor, "fields_by_name");
-  }
-
-  FixContainingTypeInDescriptor(descriptor, containing_descriptor);
-  for (int i = 0; i < descriptor.enum_type_count(); ++i) {
-    const EnumDescriptor& enum_descriptor = *descriptor.enum_type(i);
-    FixContainingTypeInDescriptor(enum_descriptor, &descriptor);
-  }
-  for (int i = 0; i < descriptor.oneof_decl_count(); ++i) {
-    map<string, string> m;
-    const OneofDescriptor* oneof = descriptor.oneof_decl(i);
-    m["descriptor_name"] = ModuleLevelDescriptorName(descriptor);
-    m["oneof_name"] = oneof->name();
-    for (int j = 0; j < oneof->field_count(); ++j) {
-      m["field_name"] = oneof->field(j)->name();
-      printer_->Print(
-          m,
-          "$descriptor_name$.oneofs_by_name['$oneof_name$'].fields.append(\n"
-          "  $descriptor_name$.fields_by_name['$field_name$'])\n");
-      printer_->Print(
-          m,
-          "$descriptor_name$.fields_by_name['$field_name$'].containing_oneof = "
-          "$descriptor_name$.oneofs_by_name['$oneof_name$']\n");
-    }
-  }
-}
 
 void Generator::AddMessageToFileDescriptor(const Descriptor& descriptor) const {
   map<string, string> m;
@@ -827,8 +577,7 @@ void Generator::AddMessageToFileDescriptor(const Descriptor& descriptor) const {
   m["message_name"] = descriptor.name();
   m["message_descriptor_name"] = ModuleLevelDescriptorName(descriptor);
   const char file_descriptor_template[] =
-      "$descriptor_name$.message_types_by_name['$message_name$'] = "
-      "$message_descriptor_name$\n";
+      "$descriptor_name$.message_types_by_name['$message_name$'] = $message_descriptor_name$\n";
   printer_->Print(m, file_descriptor_template);
 }
 
@@ -839,8 +588,7 @@ void Generator::AddEnumToFileDescriptor(
   m["enum_name"] = descriptor.name();
   m["enum_descriptor_name"] = ModuleLevelDescriptorName(descriptor);
   const char file_descriptor_template[] =
-      "$descriptor_name$.enum_types_by_name['$enum_name$'] = "
-      "$enum_descriptor_name$\n";
+      "$descriptor_name$.enum_types_by_name['$enum_name$'] = $enum_descriptor_name$\n";
   printer_->Print(m, file_descriptor_template);
 }
 
@@ -850,8 +598,7 @@ void Generator::AddExtensionToFileDescriptor(
   m["descriptor_name"] = kDescriptorKey;
   m["field_name"] = descriptor.name();
   const char file_descriptor_template[] =
-      "$descriptor_name$.extensions_by_name['$field_name$'] = "
-      "$field_name$\n";
+      "$descriptor_name$.extensions_by_name['$field_name$'] = $field_name$\n";
   printer_->Print(m, file_descriptor_template);
 }
 
@@ -892,144 +639,32 @@ void Generator::FixForeignFieldsInField(const Descriptor* containing_type,
 // look the field up in the containing type.  (e.g., fields_by_name
 // or extensions_by_name).  We ignore bsv_dict_name if containing_type
 // is NULL.
-string Generator::FieldReferencingExpression(
-    const Descriptor* containing_type,
-    const FieldDescriptor& field,
-    const string& bsv_dict_name) const {
+string Generator::FieldReferencingExpression( const Descriptor* containing_type,
+    const FieldDescriptor& field, const string& bsv_dict_name) const {
   // We should only ever be looking up fields in the current file.
   // The only things we refer to from other files are message descriptors.
-  GOOGLE_CHECK_EQ(field.file(), file_) << field.file()->name() << " vs. "
-                                << file_->name();
+  GOOGLE_CHECK_EQ(field.file(), file_) << field.file()->name() << " vs. " << file_->name();
   if (!containing_type) {
     return field.name();
   }
-  return strings::Substitute(
-      "$0.$1['$2']",
-      ModuleLevelDescriptorName(*containing_type),
-      bsv_dict_name, field.name());
-}
-
-// Prints containing_type for nested descriptors or enum descriptors.
-template <typename DescriptorT>
-void Generator::FixContainingTypeInDescriptor(
-    const DescriptorT& descriptor,
-    const Descriptor* containing_descriptor) const {
-  if (containing_descriptor != NULL) {
-    const string nested_name = ModuleLevelDescriptorName(descriptor);
-    const string parent_name = ModuleLevelDescriptorName(
-        *containing_descriptor);
-    printer_->Print(
-        "$nested_name$.containing_type = $parent_name$\n",
-        "nested_name", nested_name,
-        "parent_name", parent_name);
-  }
-}
-
-// Prints statements setting the message_type and enum_type fields in the
-// BSV descriptor objects we've already output in ths file.  We must
-// do this in a separate step due to circular references (otherwise, we'd
-// just set everything in the initial assignment statements).
-void Generator::FixForeignFieldsInDescriptors() const {
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    FixForeignFieldsInDescriptor(*file_->message_type(i), NULL);
-  }
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    AddMessageToFileDescriptor(*file_->message_type(i));
-  }
-  for (int i = 0; i < file_->enum_type_count(); ++i) {
-    AddEnumToFileDescriptor(*file_->enum_type(i));
-  }
-  for (int i = 0; i < file_->extension_count(); ++i) {
-    AddExtensionToFileDescriptor(*file_->extension(i));
-  }
-  printer_->Print("\n");
-}
-
-// We need to not only set any necessary message_type fields, but
-// also need to call RegisterExtension() on each message we're
-// extending.
-void Generator::FixForeignFieldsInExtensions() const {
-  // Top-level extensions.
-  for (int i = 0; i < file_->extension_count(); ++i) {
-    FixForeignFieldsInExtension(*file_->extension(i));
-  }
-  // Nested extensions.
-  for (int i = 0; i < file_->message_type_count(); ++i) {
-    FixForeignFieldsInNestedExtensions(*file_->message_type(i));
-  }
-  printer_->Print("\n");
-}
-
-void Generator::FixForeignFieldsInExtension(
-    const FieldDescriptor& extension_field) const {
-  GOOGLE_CHECK(extension_field.is_extension());
-  // extension_scope() will be NULL for top-level extensions, which is
-  // exactly what FixForeignFieldsInField() wants.
-  FixForeignFieldsInField(extension_field.extension_scope(), extension_field,
-                          "extensions_by_name");
-
-  map<string, string> m;
-  // Confusingly, for FieldDescriptors that happen to be extensions,
-  // containing_type() means "extended type."
-  // On the other hand, extension_scope() will give us what we normally
-  // mean by containing_type().
-  m["extended_message_class"] = ModuleLevelMessageName(
-      *extension_field.containing_type());
-  m["field"] = FieldReferencingExpression(extension_field.extension_scope(),
-                                          extension_field,
-                                          "extensions_by_name");
-  printer_->Print(m, "$extended_message_class$.RegisterExtension($field$)\n");
-}
-
-void Generator::FixForeignFieldsInNestedExtensions(
-    const Descriptor& descriptor) const {
-  // Recursively fix up extensions in all nested types.
-  for (int i = 0; i < descriptor.nested_type_count(); ++i) {
-    FixForeignFieldsInNestedExtensions(*descriptor.nested_type(i));
-  }
-  // Fix up extensions directly contained within this type.
-  for (int i = 0; i < descriptor.extension_count(); ++i) {
-    FixForeignFieldsInExtension(*descriptor.extension(i));
-  }
-}
-
-// Returns a BSV expression that instantiates a BSV EnumValueDescriptor
-// object for the given C++ descriptor.
-void Generator::PrintEnumValueDescriptor(
-    const EnumValueDescriptor& descriptor) const {
-  // TODO(robinson): Fix up EnumValueDescriptor "type" fields.
-  // More circular references.  ::sigh::
-  string options_string;
-  descriptor.options().SerializeToString(&options_string);
-  map<string, string> m;
-  m["name"] = descriptor.name();
-  m["index"] = SimpleItoa(descriptor.index());
-  m["number"] = SimpleItoa(descriptor.number());
-  m["options"] = OptionsValue("EnumValueOptions", options_string);
-  printer_->Print(
-      m,
-      "_descriptor.EnumValueDescriptor(\n"
-      "  name='$name$', index=$index$, number=$number$,\n"
-      "  options=$options$,\n"
-      "  type=None)");
+  return strings::Substitute( "$0.$1['$2']",
+      ModuleLevelDescriptorName(*containing_type), bsv_dict_name, field.name());
 }
 
 // Returns a BSV expression that calls descriptor._ParseOptions using
 // the given descriptor class name and serialized options protobuf string.
-string Generator::OptionsValue(
-    const string& class_name, const string& serialized_options) const {
+string Generator::OptionsValue( const string& class_name, const string& serialized_options) const {
   if (serialized_options.length() == 0 || GeneratingDescriptorProto()) {
     return "None";
   } else {
     string full_class_name = "descriptor_pb2." + class_name;
-    return "_descriptor._ParseOptions(" + full_class_name + "(), _b('"
-        + CEscape(serialized_options)+ "'))";
+    return "_descriptor._ParseOptions(" + full_class_name + "(), _b('" + CEscape(serialized_options)+ "'))";
   }
 }
 
 // Prints an expression for a BSV FieldDescriptor for |field|.
-void Generator::PrintFieldDescriptor(
-    const FieldDescriptor& field, bool is_extension) const {
+void Generator::PrintFieldDescriptor(const FieldDescriptor& field, bool is_extension) const
+{
   string options_string;
   field.options().SerializeToString(&options_string);
   map<string, string> m;
@@ -1038,62 +673,21 @@ void Generator::PrintFieldDescriptor(
   m["index"] = SimpleItoa(field.index());
   m["number"] = SimpleItoa(field.number());
   m["type"] = SimpleItoa(field.type());
-  m["cpp_type"] = SimpleItoa(field.cpp_type());
+  const Descriptor *mt = field.message_type();
+  const EnumDescriptor *et = field.enum_type();
+  if (mt)
+    m["cpp_type"] = mt->name();
+  else if (et)
+    m["cpp_type"] = et->name();
+  else
+    m["cpp_type"] = field.type_name();
   m["label"] = SimpleItoa(field.label());
   m["has_default_value"] = field.has_default_value() ? "True" : "False";
   m["default_value"] = StringifyDefaultValue(field);
   m["is_extension"] = is_extension ? "True" : "False";
   m["options"] = OptionsValue("FieldOptions", options_string);
-  // We always set message_type and enum_type to None at this point, and then
-  // these fields in correctly after all referenced descriptors have been
-  // defined and/or imported (see FixForeignFieldsInDescriptors()).
-  const char field_descriptor_decl[] =
-    "_descriptor.FieldDescriptor(\n"
-    "  name='$name$', full_name='$full_name$', index=$index$,\n"
-    "  number=$number$, type=$type$, cpp_type=$cpp_type$, label=$label$,\n"
-    "  has_default_value=$has_default_value$, default_value=$default_value$,\n"
-    "  message_type=None, enum_type=None, containing_type=None,\n"
-    "  is_extension=$is_extension$, extension_scope=None,\n"
-    "  options=$options$)";
-  printer_->Print(m, field_descriptor_decl);
-}
-
-// Helper for Print{Fields,Extensions}InDescriptor().
-void Generator::PrintFieldDescriptorsInDescriptor(
-    const Descriptor& message_descriptor,
-    bool is_extension,
-    const string& list_variable_name,
-    int (Descriptor::*CountFn)() const,
-    const FieldDescriptor* (Descriptor::*GetterFn)(int) const) const {
-  printer_->Print("$list$=[\n", "list", list_variable_name);
-  printer_->Indent();
-  for (int i = 0; i < (message_descriptor.*CountFn)(); ++i) {
-    PrintFieldDescriptor(*(message_descriptor.*GetterFn)(i),
-                         is_extension);
-    printer_->Print(",\n");
-  }
-  printer_->Outdent();
-  printer_->Print("],\n");
-}
-
-// Prints a statement assigning "fields" to a list of BSV FieldDescriptors,
-// one for each field present in message_descriptor.
-void Generator::PrintFieldsInDescriptor(
-    const Descriptor& message_descriptor) const {
-  const bool is_extension = false;
-  PrintFieldDescriptorsInDescriptor(
-      message_descriptor, is_extension, "fields",
-      &Descriptor::field_count, &Descriptor::field);
-}
-
-// Prints a statement assigning "extensions" to a list of BSV
-// FieldDescriptors, one for each extension present in message_descriptor.
-void Generator::PrintExtensionsInDescriptor(
-    const Descriptor& message_descriptor) const {
-  const bool is_extension = true;
-  PrintFieldDescriptorsInDescriptor(
-      message_descriptor, is_extension, "extensions",
-      &Descriptor::extension_count, &Descriptor::extension);
+  //printer_->Print(m, "FD(name='$name$',number=$number$,cpp=$cpp_type$,label=$label$)\n");
+  printer_->Print(m, "$cpp_type$ $name$; /*number=$number$,label=$label$*/\n");
 }
 
 bool Generator::GeneratingDescriptorProto() const {
@@ -1104,8 +698,7 @@ bool Generator::GeneratingDescriptorProto() const {
 // This name is module-qualified iff the given descriptor describes an
 // entity that doesn't come from the current file.
 template <typename DescriptorT>
-string Generator::ModuleLevelDescriptorName(
-    const DescriptorT& descriptor) const {
+string Generator::ModuleLevelDescriptorName(const DescriptorT& descriptor) const {
   // FIXME(robinson):
   // We currently don't worry about collisions with underscores in the type
   // names, so these would collide in nasty ways if found in the same file:
@@ -1172,34 +765,25 @@ void Generator::PrintSerializedPbInterval(
   proto.SerializeToString(&sp);
   int offset = file_descriptor_serialized_.find(sp);
   GOOGLE_CHECK_GE(offset, 0);
-
-  printer_->Print("serialized_start=$serialized_start$,\n"
-                  "serialized_end=$serialized_end$,\n",
-                  "serialized_start", SimpleItoa(offset),
-                  "serialized_end", SimpleItoa(offset + sp.size()));
+  printer_->Print("serialized_start=$serialized_start$,serialized_end=$serialized_end$,",
+        "serialized_start", SimpleItoa(offset), "serialized_end", SimpleItoa(offset + sp.size()));
 }
 
 namespace {
-void PrintDescriptorOptionsFixingCode(const string& descriptor,
-                                      const string& options,
-                                      io::Printer* printer) {
+void PrintDescriptorOptionsFixingCode(const string& descriptor, const string& options, io::Printer* printer) {
   // TODO(xiaofeng): I have added a method _SetOptions() to DescriptorBase
   // in proto2 bsv runtime but it couldn't be used here because appengine
   // uses a snapshot version of the library in which the new method is not
   // yet present. After appengine has synced their runtime library, the code
   // below should be cleaned up to use _SetOptions().
-  printer->Print(
-      "$descriptor$.has_options = True\n"
-      "$descriptor$._options = $options$\n",
-      "descriptor", descriptor, "options", options);
+  printer->Print( "$descriptor$.has_options = True\n$descriptor$._options = $options$\n", "descriptor", descriptor, "options", options);
 }
 }  // namespace
 
 // Prints expressions that set the options field of all descriptors.
 void Generator::FixAllDescriptorOptions() const {
   // Prints an expression that sets the file descriptor's options.
-  string file_options = OptionsValue(
-      "FileOptions", file_->options().SerializeAsString());
+  string file_options = OptionsValue( "FileOptions", file_->options().SerializeAsString());
   if (file_options != "None") {
     PrintDescriptorOptionsFixingCode(kDescriptorKey, file_options, printer_);
   }
@@ -1224,19 +808,16 @@ void Generator::FixAllDescriptorOptions() const {
 // value descriptors.
 void Generator::FixOptionsForEnum(const EnumDescriptor& enum_descriptor) const {
   string descriptor_name = ModuleLevelDescriptorName(enum_descriptor);
-  string enum_options = OptionsValue(
-      "EnumOptions", enum_descriptor.options().SerializeAsString());
+  string enum_options = OptionsValue( "EnumOptions", enum_descriptor.options().SerializeAsString());
   if (enum_options != "None") {
     PrintDescriptorOptionsFixingCode(descriptor_name, enum_options, printer_);
   }
   for (int i = 0; i < enum_descriptor.value_count(); ++i) {
     const EnumValueDescriptor& value_descriptor = *enum_descriptor.value(i);
-    string value_options = OptionsValue(
-        "EnumValueOptions", value_descriptor.options().SerializeAsString());
+    string value_options = OptionsValue( "EnumValueOptions", value_descriptor.options().SerializeAsString());
     if (value_options != "None") {
       PrintDescriptorOptionsFixingCode(
-          StringPrintf("%s.values_by_name[\"%s\"]", descriptor_name.c_str(),
-                       value_descriptor.name().c_str()),
+          StringPrintf("%s.values_by_name[\"%s\"]", descriptor_name.c_str(), value_descriptor.name().c_str()),
           value_options, printer_);
     }
   }
@@ -1246,8 +827,7 @@ void Generator::FixOptionsForEnum(const EnumDescriptor& enum_descriptor) const {
 // extensions).
 void Generator::FixOptionsForField(
     const FieldDescriptor& field) const {
-  string field_options = OptionsValue(
-      "FieldOptions", field.options().SerializeAsString());
+  string field_options = OptionsValue( "FieldOptions", field.options().SerializeAsString());
   if (field_options != "None") {
     string field_name;
     if (field.is_extension()) {
@@ -1255,12 +835,10 @@ void Generator::FixOptionsForField(
         // Top level extensions.
         field_name = field.name();
       } else {
-        field_name = FieldReferencingExpression(
-            field.extension_scope(), field, "extensions_by_name");
+        field_name = FieldReferencingExpression( field.extension_scope(), field, "extensions_by_name");
       }
     } else {
-      field_name = FieldReferencingExpression(
-          field.containing_type(), field, "fields_by_name");
+      field_name = FieldReferencingExpression( field.containing_type(), field, "fields_by_name");
     }
     PrintDescriptorOptionsFixingCode(field_name, field_options, printer_);
   }
@@ -1292,9 +870,7 @@ void Generator::FixOptionsForMessage(const Descriptor& descriptor) const {
       "MessageOptions", descriptor.options().SerializeAsString());
   if (message_options != "None") {
     string descriptor_name = ModuleLevelDescriptorName(descriptor);
-    PrintDescriptorOptionsFixingCode(descriptor_name,
-                                     message_options,
-                                     printer_);
+    PrintDescriptorOptionsFixingCode(descriptor_name, message_options, printer_);
   }
 }
 
@@ -1304,8 +880,7 @@ void Generator::CopyPublicDependenciesAliases(
     const string& copy_from, const FileDescriptor* file) const {
   for (int i = 0; i < file->public_dependency_count(); ++i) {
     string module_alias = ModuleAlias(file->public_dependency(i)->name());
-    printer_->Print("$alias$ = $copy_from$.$alias$\n", "alias", module_alias,
-                    "copy_from", copy_from);
+    printer_->Print("$alias$ = $copy_from$.$alias$\n", "alias", module_alias, "copy_from", copy_from);
     CopyPublicDependenciesAliases(copy_from, file->public_dependency(i));
   }
 }
