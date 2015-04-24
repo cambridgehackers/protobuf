@@ -20,6 +20,8 @@ IDL language:
 
 1. In hardware, it is more efficient to support fixed length vectors.  It would be useful to have an optional 'size' field on 'repeated' fields.
 
+2. Connectal supports asynchronous remote method invocation. How would that be expressed as a protobuf service?
+
 Possible implementation alternatives:
 
 1. Support full/unconstrained current coding.  (most expensive in h/w; lowest performance)
@@ -31,5 +33,5 @@ Possible implementation alternatives:
 4. Change line encoding to reflect all the constraints above(no tags, fixed length arrays).  (highest performing hardware)
 
 2014/04/22 13:28 EDT jca
-2014/04/22 13:56 EDt jamey
+2014/04/24 13:56 EDT jamey
 
