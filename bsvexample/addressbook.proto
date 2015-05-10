@@ -37,3 +37,7 @@ service EchoRequest {
   rpc echo (AddressBook) returns (Empty);
   rpc echo2 (AddressBook2) returns (Empty);
 }
+service EchoIndication {
+  rpc heard (AddressBook) returns (Empty);
+  rpc heard2 (AddressBook2) returns (Empty);
+}
