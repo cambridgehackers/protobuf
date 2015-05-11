@@ -86,7 +86,7 @@ string ModuleName(const string& filename) {
   string basename = StripProto(filename);
   StripString(&basename, "-", '_');
   StripString(&basename, "/", '.');
-  return basename + "_pb2";
+  return basename + "_pb";
 }
 
 
@@ -245,6 +245,7 @@ Generator::Generator() : file_(NULL) {
 Generator::~Generator() {
 }
 
+static const char *enum_separator = " ";
 bool Generator::Generate(const FileDescriptor* file,
                          const string& parameter,
                          GeneratorContext* context,
@@ -263,7 +264,7 @@ bool Generator::Generate(const FileDescriptor* file,
   const char *separator = " ";
   string filename = module_name;
   StripString(&filename, ".", '/');
-  filename += ".bsv";
+  filename += ".json";
 
   FileDescriptorProto fdp;
   file_->CopyTo(&fdp);
@@ -280,6 +281,7 @@ bool Generator::Generate(const FileDescriptor* file,
   vector<pair<string, int> > top_level_enum_values;
   for (int i = 0; i < file_->enum_type_count(); ++i) {
     const EnumDescriptor& enum_descriptor = *file_->enum_type(i);
+    printer_->Print("KKLK");
     printer_->Print(separator);
     PrintEnum(enum_descriptor);
     printer_->Print("$name$ = enum_type_wrapper.EnumTypeWrapper($descriptor_name$)",
@@ -299,17 +301,20 @@ bool Generator::Generate(const FileDescriptor* file,
     const FieldDescriptor& extension_field = *file_->extension(i);
     string constant_name = extension_field.name() + "_FIELD_NUMBER";
     UpperString(&constant_name);
+    printer_->Print("KMMM");
     printer_->Print(separator);
     printer_->Print("$constant_name$ = $number$\n", "constant_name", constant_name, "number", SimpleItoa(extension_field.number()));
     printer_->Print("$name$ = ", "name", extension_field.name());
     PrintFieldDescriptor(extension_field, top_is_extension);
     separator = ",";
   }
+  enum_separator = " ";
   for (int i = 0; i < file_->message_type_count(); ++i) {
+    //printer_->Print("KRRR");
     //printer_->Print(separator);
     PrintNestedEnums(*file_->message_type(i));
-    separator = ",";
   }
+  separator = enum_separator;
   for (int i = 0; i < file_->message_type_count(); ++i) {
     if (!strcmp(file_->message_type(i)->name().c_str(), "Empty"))
        continue;
@@ -333,8 +338,8 @@ bool Generator::Generate(const FileDescriptor* file,
     printer_->Indent();
     //ServiceDescriptorProto sdp;
     //PrintSerializedPbInterval(descriptor, sdp);
+    const char *separator = " ";
     for (int inneri = 0; inneri < file_->service(outeri)->method_count(); ++inneri) {
-      const char *separator = " ";
       const MethodDescriptor* method = file_->service(outeri)->method(inneri);
       method->options().SerializeToString(&options_string);
 
@@ -404,6 +409,7 @@ void Generator::PrintEnum(const EnumDescriptor& enum_descriptor) const {
       "                \"type\": \"Enum\"\n"
       "            }\n"
       "        }\n" , "name", enum_descriptor.name());
+enum_separator = ",";
 }
 
 // Recursively prints enums in nested types within descriptor, then
